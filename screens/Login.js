@@ -17,6 +17,7 @@ import { handleLogin } from "../utils/handleLogin.js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../state/AuthProvider";
 import SignUp from "./SignUp";
+import GoogleAuthButton from "../components/GoogleAuthButton.js";
 
 const logoImage = require("../assets/Logo_T.png"); // Adjust the path to your logo image
 const headerImage = require("../assets/headers/Immpression_multi.png"); // Adjust the path to your header image
@@ -29,6 +30,43 @@ const Login = () => {
   const { login } = useAuth();
   const navigation = useNavigation();
   const [error, setError] = useState("");
+
+
+  const handleGoogleAuth = async (userInfo) => {
+    try {
+      // Send Google auth data to your backend (optional)
+      // const response = await axios.post(`${API_URL}/auth/google`, {
+      //   email: userInfo.email,
+      //   name: userInfo.name,
+      //   googleId: userInfo.id
+      // });
+  
+      // Create userData structure matching your app's requirements
+      const userData = {
+        user: {
+          user: {
+            name: userInfo.name,
+            email: userInfo.email,
+            id: userInfo.id,
+            provider: 'google',
+          }
+        },
+        token: userInfo.accessToken, // Use the actual access token
+        provider: 'google',
+      };
+      console.log("User Data:", userData);
+  
+      await login(userData);
+      // No navigation needed - AuthProvider will handle it
+    } catch (error) {
+      console.error('Error during Google auth:', error);
+      setError('Failed to authenticate with Google');
+      // You can use your showToast here for SignUp screen
+      if (showToast) {
+        showToast('Failed to authenticate with Google');
+      }
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -124,6 +162,7 @@ const Login = () => {
               >
                 <Text style={styles.buttonOutlineText}>Sign Up</Text>
               </Pressable>
+              <GoogleAuthButton onAuthComplete={handleGoogleAuth} />
             </View>
           </KeyboardAvoidingView>
         </View>

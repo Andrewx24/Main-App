@@ -16,6 +16,8 @@ import { useNavigation } from '@react-navigation/native';
 import { handleLogin } from '../utils/handleLogin';
 import Icon from 'react-native-vector-icons/FontAwesome'; // Import your preferred icon set
 import { showToast } from '../utils/toastNotification';
+import GoogleAuthButton from '../components/GoogleAuthButton';
+
 
 const logoImage = require('../assets/Logo_T.png'); // Adjust the path to your logo image
 const headerImage = require('../assets/headers/Immpression_multi.png'); // Adjust the path to your header image
@@ -103,6 +105,63 @@ const SignUp = () => {
 
   const handleBack = () => {
     navigation.navigate('Login');
+  };
+  const handleGoogleSignUp = async () => {
+    try {
+      setIsGoogleLoading(true);
+      setError("");
+      const result = await promptAsync();
+
+      if (result?.type === "success") {
+        const accessToken = result.authentication.accessToken;
+
+        const userInfoResponse = await fetch(
+          "https://www.googleapis.com/userinfo/v2/me",
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+
+        const userInfo = await userInfoResponse.json();
+
+        // Send to your backend
+        const response = await axios.post(`${API_URL}/auth/google/signup`, {
+          email: userInfo.email,
+          name: userInfo.name,
+          googleId: userInfo.id,
+          picture: userInfo.picture,
+          accessToken: accessToken,
+        });
+
+        if (response.data.success) {
+          const userData = {
+            user: {
+              email: userInfo.email,
+              name: userInfo.name,
+              photo: userInfo.picture,
+              id: response.data.userId,
+            },
+            token: response.data.token,
+          };
+
+          await login(userData);
+          showToast("Successfully signed up with Google!");
+          navigation.navigate("Home");
+        } else {
+          throw new Error(response.data.message || "Sign up failed");
+        }
+      }
+    } catch (error) {
+      console.error("Google Sign Up Error:", error);
+      if (error.response?.status === 409) {
+        setError("Account already exists. Please log in instead.");
+        setTimeout(() => navigation.navigate("Login"), 2000);
+      } else {
+        setError(error.message || "An error occurred during sign up");
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -198,6 +257,7 @@ const SignUp = () => {
             <Text style={styles.buttonOutlineText2}>Back to Login</Text>
           </Pressable>
         </KeyboardAvoidingView>
+        <GoogleAuthButton onAuthComplete={handleGoogleSignUp} />
       </View>
     </ImageBackground>
   );

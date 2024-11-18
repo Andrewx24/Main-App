@@ -14,14 +14,45 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "scheme": "com.immpression.Immpression",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.immpression.Immpression",
+      "config": {
+        "googleSignIn": {
+          "reservedClientId": "com.googleusercontent.apps.31361740434-uasqvn754uln5hgcijp6n59lc4ig4s74"
+        }
+      },
+      "usesNonExemptEncryption": false,
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.31361740434-uasqvn754uln5hgcijp6n59lc4ig4s74"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.immpression.Immpression",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "com.immpression.Immpression",
+              "host": "oauth2redirect"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -42,7 +73,7 @@
       [
         "expo-font",
         {
-          "fonts": ["path/to/file.ttf"]
+          "fonts": []
         }
       ]
     ]
