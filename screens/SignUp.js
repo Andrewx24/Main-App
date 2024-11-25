@@ -17,6 +17,8 @@ import { handleLogin } from '../utils/handleLogin';
 import Icon from 'react-native-vector-icons/FontAwesome'; // Import your preferred icon set
 import { showToast } from '../utils/toastNotification';
 import { useAuth } from '../state/AuthProvider';
+import GoogleAuthButton from '../components/GoogleAuthButton';
+
 
 const logoImage = require('../assets/Logo_T.png'); // Adjust the path to your logo image
 const headerImage = require('../assets/headers/Immpression_multi.png'); // Adjust the path to your header image
@@ -100,10 +102,26 @@ const SignUp = () => {
   };
   console.log(passwordLengthError);
 
+
   const handleBack = () => {
     navigation.navigate('Login');
   };
-
+  const handleGoogleAuth = async (authResult) => {
+    try {
+      if (authResult.token) {
+        const loginData = {
+          token: authResult.token,
+          user: authResult.user,
+          success: true
+        };
+        await login(loginData);
+        // Navigation will happen automatically due to userData change in AuthProvider
+      }
+    } catch (error) {
+      console.error('Error handling Google auth:', error);
+      setError('Failed to authenticate with Google');
+    }
+  };
   return (
     <ImageBackground source={backgroundImage} style={styles.backgroundImage}>
       <View style={styles.container}>
@@ -195,6 +213,7 @@ const SignUp = () => {
             style={[styles.button, styles.buttonOutline2]}
           >
             <Text style={styles.buttonOutlineText2}>Back to Login</Text>
+            <GoogleAuthButton onAuthComplete={handleGoogleAuth} isSignUp={true} />
           </Pressable>
         </KeyboardAvoidingView>
       </View>

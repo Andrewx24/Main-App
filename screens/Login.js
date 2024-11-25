@@ -17,7 +17,7 @@ import { handleLogin } from "../utils/handleLogin.js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../state/AuthProvider";
 import SignUp from "./SignUp";
-
+import GoogleAuthButton from "../components/GoogleAuthButton.js";
 const logoImage = require("../assets/Logo_T.png"); // Adjust the path to your logo image
 const headerImage = require("../assets/headers/Immpression_multi.png"); // Adjust the path to your header image
 const backgroundImage = require("../assets/backgrounds/paint_background.png"); // Adjust the path to your background image
@@ -43,6 +43,23 @@ const Login = () => {
       setError("Invalid email or password");
     }
   };
+  const handleGoogleAuth = async (authResult) => {
+    try {
+      if (authResult.token) {
+        const loginData = {
+          token: authResult.token,
+          user: authResult.user,
+          success: true
+        };
+        await login(loginData);
+        // Navigation will happen automatically due to userData change in AuthProvider
+      }
+    } catch (error) {
+      console.error('Error handling Google auth:', error);
+      setError('Failed to authenticate with Google');
+    }
+  };
+  
 
   const navigateTo = (screenName) => {
     navigation.navigate(screenName);
@@ -121,6 +138,7 @@ const Login = () => {
               >
                 <Text style={styles.buttonOutlineText}>Sign Up</Text>
               </Pressable>
+              <GoogleAuthButton onAuthComplete={handleGoogleAuth} />
             </View>
           </KeyboardAvoidingView>
         </View>
