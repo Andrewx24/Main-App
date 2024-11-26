@@ -44,10 +44,15 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
     }
   }, [navigation]);
 
-  const loginWithGoogle = async (userData) => {
+  const callBackend = async (endpoint, userData) => {
     try {
       const baseUrl = __DEV__ ? 'http://localhost:4000' : API_URL;
-      const response = await fetch(`${baseUrl}${ENDPOINTS.LOGIN}`, {
+      const url = `${baseUrl}${endpoint}`;
+      
+      console.log('Making backend request to:', url);
+      console.log('Request data:', userData);
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,11 +61,14 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
         body: JSON.stringify(userData)
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+
+      const result = JSON.parse(responseText);
       return result;
     } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
+      console.error('Backend request failed:', error);
+      throw new Error('Failed to communicate with server');
     }
   };
 
@@ -70,6 +78,7 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
         throw new Error('No access token received');
       }
 
+      // Get Google user info
       const userInfoResponse = await fetch(
         'https://www.googleapis.com/userinfo/v2/me',
         {
@@ -94,53 +103,41 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
         name: userInfo.name || userInfo.given_name
       };
 
-      // Try signup first if we're in signup mode
       if (isSignUp) {
-        try {
-          const baseUrl = __DEV__ ? 'http://localhost:4000' : API_URL;
-          const signupResponse = await fetch(`${baseUrl}${ENDPOINTS.SIGNUP}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify(userData)
-          });
+        // Attempt signup
+        const signupResult = await callBackend(ENDPOINTS.SIGNUP, userData);
+        console.log('Signup result:', signupResult);
 
-          const signupResult = await signupResponse.json();
+        if (signupResult.message === 'Email already registered') {
+          // If user exists, try logging in
+          showToast('Account exists, logging in...');
+          const loginResult = await callBackend(ENDPOINTS.LOGIN, userData);
           
-          // If user exists, proceed with login
-          if (!signupResult.success && signupResult.message === 'Email already registered') {
-            showToast('Account exists, logging you in...');
-            const loginResult = await loginWithGoogle(userData);
-            if (loginResult.success) {
-              await login({
-                token: loginResult.token,
-                user: loginResult.user
-              });
-              handleNavigation('Home');
-              return;
-            }
-          }
-
-          // If signup was successful
-          if (signupResult.success) {
+          if (loginResult.success) {
             await login({
-              token: signupResult.token,
-              user: signupResult.user
+              token: loginResult.token,
+              user: loginResult.user
             });
-            showToast('Sign up successful');
-            handleNavigation('AccountType');
-            return;
+            showToast('Welcome back!');
+            handleNavigation('Home');
+          } else {
+            throw new Error('Login failed after existing account found');
           }
-
+        } else if (signupResult.success) {
+          // New user signup successful
+          await login({
+            token: signupResult.token,
+            user: signupResult.user
+          });
+          showToast('Sign up successful');
+          handleNavigation('AccountType');
+        } else {
           throw new Error(signupResult.message || 'Signup failed');
-        } catch (error) {
-          throw new Error(error.message || 'Authentication failed');
         }
       } else {
         // Direct login flow
-        const loginResult = await loginWithGoogle(userData);
+        const loginResult = await callBackend(ENDPOINTS.LOGIN, userData);
+        
         if (loginResult.success) {
           await login({
             token: loginResult.token,
@@ -153,11 +150,15 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
         }
       }
 
+      if (onAuthComplete) {
+        onAuthComplete(loginResult);
+      }
+
     } catch (error) {
       console.error('Auth processing error:', error);
       showToast(error.message || 'Authentication failed');
     }
-  }, [isSignUp, login, handleNavigation]);
+  }, [isSignUp, login, handleNavigation, onAuthComplete]);
 
   React.useEffect(() => {
     if (response?.type === 'success') {
