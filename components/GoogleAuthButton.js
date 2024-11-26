@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Button, Platform } from 'react-native'; // Added Platform import
+import { Button, Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -11,6 +11,11 @@ import { CommonActions } from '@react-navigation/native';
 import { useAuth } from '../state/AuthProvider';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const ENDPOINTS = {
+  LOGIN: '/auth/google/login',
+  SIGNUP: '/auth/google/signup'
+};
 
 const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
   const navigation = useNavigation();
@@ -27,7 +32,6 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
 
   const handleNavigation = useCallback(async (screen) => {
     try {
-      console.log('Attempting navigation to:', screen);
       navigation.dispatch(
         CommonActions.reset({
           index: 0,
@@ -40,101 +44,120 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
     }
   }, [navigation]);
 
+  const loginWithGoogle = async (userData) => {
+    try {
+      const baseUrl = __DEV__ ? 'http://localhost:4000' : API_URL;
+      const response = await fetch(`${baseUrl}${ENDPOINTS.LOGIN}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(userData)
+      });
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  };
+
   const processAuthResult = useCallback(async (authResponse) => {
     try {
       if (!authResponse?.accessToken) {
         throw new Error('No access token received');
       }
 
-      // Verify ID token if present
-      const idToken = authResponse.idToken;
-      if (idToken) {
-        const tokenInfo = await fetch(
-          `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
-        );
-        if (!tokenInfo.ok) {
-          throw new Error('Invalid ID token');
-        }
-      }
-
-      // Fetch user info
       const userInfoResponse = await fetch(
         'https://www.googleapis.com/userinfo/v2/me',
         {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${authResponse.accessToken}`,
-            'Accept': 'application/json',
-          },
+            'Authorization': `Bearer ${authResponse.accessToken}`,
+            'Accept': 'application/json'
+          }
         }
       );
 
       if (!userInfoResponse.ok) {
-        throw new Error('Failed to fetch user info');
+        throw new Error('Failed to get user info from Google');
       }
 
       const userInfo = await userInfoResponse.json();
-      console.log('Received user info:', { email: userInfo.email });
+      console.log('Received user info from Google:', userInfo);
 
-      // Prepare data for backend
       const userData = {
-        provider: 'google',
         googleId: userInfo.id,
         email: userInfo.email,
-        name: userInfo.name,
-        picture: userInfo.picture,
-        token: authResponse.accessToken
+        name: userInfo.name || userInfo.given_name
       };
 
-      // Send to backend
-      const endpoint = isSignUp ? '/auth/google/signup' : '/auth/google/login';
-      console.log('Sending to backend:', `${API_URL}${endpoint}`);
+      // Try signup first if we're in signup mode
+      if (isSignUp) {
+        try {
+          const baseUrl = __DEV__ ? 'http://localhost:4000' : API_URL;
+          const signupResponse = await fetch(`${baseUrl}${ENDPOINTS.SIGNUP}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify(userData)
+          });
 
-      const backendResponse = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData)
-      });
+          const signupResult = await signupResponse.json();
+          
+          // If user exists, proceed with login
+          if (!signupResult.success && signupResult.message === 'Email already registered') {
+            showToast('Account exists, logging you in...');
+            const loginResult = await loginWithGoogle(userData);
+            if (loginResult.success) {
+              await login({
+                token: loginResult.token,
+                user: loginResult.user
+              });
+              handleNavigation('Home');
+              return;
+            }
+          }
 
-      if (!backendResponse.ok) {
-        const errorData = await backendResponse.json();
-        throw new Error(errorData.message || 'Backend authentication failed');
-      }
+          // If signup was successful
+          if (signupResult.success) {
+            await login({
+              token: signupResult.token,
+              user: signupResult.user
+            });
+            showToast('Sign up successful');
+            handleNavigation('AccountType');
+            return;
+          }
 
-      const backendResult = await backendResponse.json();
-
-      // Prepare login data
-      const loginData = {
-        token: authResponse.accessToken,
-        provider: 'google',
-        user: {
-          user: backendResult.user || userInfo
+          throw new Error(signupResult.message || 'Signup failed');
+        } catch (error) {
+          throw new Error(error.message || 'Authentication failed');
         }
-      };
-
-      console.log('Saving auth data...');
-      await login(loginData);
-
-      // Handle navigation
-      const targetScreen = isSignUp ? 'AccountType' : 'Home';
-      console.log(`Navigation target: ${targetScreen}`);
-      
-      // Small delay to ensure state is updated
-      setTimeout(() => {
-        handleNavigation(targetScreen);
-      }, 100);
-
-      if (onAuthComplete) {
-        onAuthComplete(backendResult);
+      } else {
+        // Direct login flow
+        const loginResult = await loginWithGoogle(userData);
+        if (loginResult.success) {
+          await login({
+            token: loginResult.token,
+            user: loginResult.user
+          });
+          showToast('Login successful');
+          handleNavigation('Home');
+        } else {
+          throw new Error(loginResult.message || 'Login failed');
+        }
       }
 
     } catch (error) {
       console.error('Auth processing error:', error);
       showToast(error.message || 'Authentication failed');
     }
-  }, [isSignUp, login, handleNavigation, onAuthComplete]);
+  }, [isSignUp, login, handleNavigation]);
 
   React.useEffect(() => {
     if (response?.type === 'success') {
@@ -145,14 +168,15 @@ const GoogleAuthButton = ({ onAuthComplete, isSignUp = false }) => {
       });
     } else if (response?.type === 'error') {
       console.error('Google auth error:', response.error);
-      showToast('Authentication failed');
+      showToast('Google authentication failed');
     }
   }, [response, processAuthResult]);
 
   const handlePress = async () => {
     try {
       console.log('Google auth button pressed');
-      await promptAsync({ useProxy: true, showInRecents: true });
+      const result = await promptAsync();
+      console.log('Prompt result:', result);
     } catch (error) {
       console.error('Button press error:', error);
       showToast('Failed to start authentication');

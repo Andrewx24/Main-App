@@ -109,17 +109,28 @@ const SignUp = () => {
   const handleGoogleAuth = async (authResult) => {
     try {
       if (authResult.token) {
-        const loginData = {
-          token: authResult.token,
-          user: authResult.user,
-          success: true
-        };
-        await login(loginData);
-        // Navigation will happen automatically due to userData change in AuthProvider
+        // Check if the error message indicates user already exists
+        if (authResult.message?.toLowerCase().includes('already registered') || 
+            authResult.message?.toLowerCase().includes('already exists')) {
+          // User exists, navigate to Home
+          navigation.navigate('Home');
+          showToast('Welcome back!');
+        } else {
+          // New user, proceed with normal signup flow
+          const loginData = {
+            token: authResult.token,
+            user: authResult.user,
+            success: true
+          };
+          await login(loginData);
+          // New users should go to AccountType
+          navigation.navigate('AccountType');
+        }
       }
     } catch (error) {
       console.error('Error handling Google auth:', error);
-      setError('Failed to authenticate with Google');
+      setError(error.message || 'Failed to authenticate with Google');
+      showToast(error.message || 'Authentication failed');
     }
   };
   return (
